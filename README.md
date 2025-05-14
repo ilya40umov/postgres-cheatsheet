@@ -1,4 +1,4 @@
-# postgres-playbook
+# postgres-cheatsheet
 
 Recipes and notes on using PostgreSQL 
 
