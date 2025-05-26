@@ -5,10 +5,13 @@ PostgreSQL cheat sheet
 * [Database size](#database-size)
 * [Size of each table](#size-of-each-table)
 * [Size of each index](#size-of-each-index)
+* [Table scans stats](#index-usage-stats)
+* [Index usage stats](#index-usage-stats)
+* [Vacuum stats](#vacuum-stats)
 * [Running queries](#running-queries)
 * [Locked queries](#locked-queries)
 * [Query termination](#query-termination)
-* [Specific Issues](#specific-issues)
+* [Specific issues](#specific-issues)
 
 ### Database size
 
@@ -40,9 +43,58 @@ SELECT
     pg_size_pretty(pg_relation_size(relid)) as table_size,
     pg_size_pretty(pg_total_relation_size(relid)) as total_relation_size,
     reltuples::bigint as table_row_count
-FROM pg_stat_all_indexes JOIN pg_class ON pg_stat_all_indexes.relid = pg_class.oid
+FROM pg_stat_all_indexes INNER JOIN pg_class ON pg_stat_all_indexes.relid = pg_class.oid
 WHERE pg_stat_all_indexes.schemaname = 'public'
 ORDER BY pg_total_relation_size(relid) DESC, pg_relation_size(indexrelid) DESC;
+```
+
+### Table scans stats
+
+```sql
+SELECT
+    schemaname,
+    relname AS table_name,
+    to_char(n_live_tup, '999,999,999,999') AS table_rows,
+    pg_size_pretty(pg_relation_size(relname :: regclass)) AS table_size,
+    to_char(seq_scan, '999,999,999,999') AS total_seq_scans,
+    to_char(idx_scan, '999,999,999,999') AS total_index_scans
+FROM pg_stat_all_tables
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+    AND schemaname NOT LIKE 'pg_toast%'
+ORDER BY relname ASC;
+```
+
+### Index usage stats
+
+```sql
+SELECT
+    schemaname,
+    relname AS table_name,
+    indexrelname AS index_name,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+ORDER BY idx_scan DESC
+LIMIT 50;
+```
+
+### Vacuum stats
+
+```sql
+SELECT
+    schemaname,
+    relname AS table_name,
+    n_live_tup AS estimated_live_rows,
+    n_dead_tup AS estimated_dead_rows,
+    last_vacuum,
+    last_autovacuum,
+    vacuum_count,
+    autovacuum_count
+FROM pg_stat_all_tables
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema') 
+    AND schemaname NOT LIKE 'pg_toast%'
+ORDER BY n_dead_tup DESC;
 ```
 
 ### Running queries
@@ -109,7 +161,7 @@ select pg_terminate_backend(1234);
 
 ### Get invalid indices
 
-* [Problems with concurrent Postgres indexes](https://medium.com/carwow-product-engineering/problems-with-concurrent-postgres-indexes-and-how-to-solve-them-c57f7656c852)
+[Problems with concurrent Postgres indexes](https://medium.com/carwow-product-engineering/problems-with-concurrent-postgres-indexes-and-how-to-solve-them-c57f7656c852)
 
 ```sql
 -- get invalid indices
